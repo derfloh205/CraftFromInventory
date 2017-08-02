@@ -1,0 +1,5 @@
+## Interface: 70200
+## Title: CraftFromInventory
+## RequiredDeps: Blizzard_TradeSkillUI
+## Notes: Craft only from your Inventory
+CraftFromInventory.lua
