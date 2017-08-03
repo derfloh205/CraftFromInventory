@@ -1,4 +1,5 @@
 local InventoryOnly = false
+local craftable = true
 
 local function roundToNthDecimal(num, n)
   local mult = 10^(n or 0)
@@ -18,8 +19,17 @@ end
 
 function updateCFI()
 	print("cfi update")
+	if not TradeSkillFrame.DetailsFrame.Contents:IsVisible() then
+		print("error blocked")
+		return
+	end
+
 	-- move to better event handlers
 	local currentRecipeID = TradeSkillFrame.RecipeList:GetSelectedRecipeID()
+	if currentRecipeID == nil then
+		print("error blocked")
+		return
+	end
 	local numberOfReagents = C_TradeSkillUI.GetRecipeNumReagents(currentRecipeID)
 	local contents = TradeSkillFrame.DetailsFrame.Contents
 	local currentReagentObject = nil
@@ -29,6 +39,13 @@ function updateCFI()
 	local reagentInPlayerBagString = ""
 	local reagentInPlayerBankString = ""
 	-- loop
+	craftable = true
+
+	if numberOfReagents == nil then
+		print("error blocked")
+		return
+	end
+
 	for currentReagent = 1, numberOfReagents do
 		reagentName, _, reagentNeed, playerAmount = C_TradeSkillUI.GetRecipeReagentInfo(currentRecipeID, currentReagent)
 		local reagentInPlayerBag = GetItemCount(reagentName, false, false)
@@ -58,54 +75,53 @@ function updateCFI()
 			currentReagentObject = contents.Reagent6
 		end
 
+		local repeating = C_TradeSkillUI.IsRecipeRepeating(currentRecipeID)
+
 		if CheckButtonFrame:GetChecked() then
 			-- inventory only mode
 			adaptColor(reagentInPlayerBag, reagentNeed, currentReagentObject)
 			if string.len(reagentInPlayerBagString) >= 3 then
 				reagentInPlayerBagString = reagentInPlayerBagString.."\n"
 			end
-			if reagentInPlayerBag < reagentNeed then
+			if (reagentInPlayerBag < (reagentNeed + reagentInPlayerBag)) and repeating or 
+				(reagentInPlayerBag < reagentNeed) then
 				-- disable button and fire cancel cast event
-				toggleCraftable(false)
-			else
-				toggleCraftable(true)
+				craftable = false
 			end
-			currentReagentObject.Count:SetText(reagentInPlayerBagString.."/"..reagentNeed)
+			currentReagentObject.Count:SetText(reagentInPlayerBagString.." /"..reagentNeed)
 		else
 			-- include bank mode
 			adaptColor(playerAmount, reagentNeed, currentReagentObject)
 			if string.len(reagentInPlayerBankString) >= 3 then
 				reagentInPlayerBankString = reagentInPlayerBankString.."\n"
 			end
-			if playerAmount < reagentNeed then
+			if (playerAmount < (reagentNeed + playerAmount)) and repeating or 
+				(playerAmount < reagentNeed) then
 				-- disable button and fire cancel cast event
-				toggleCraftable(false)
-			else
-				toggleCraftable(true)
+				craftable = false
 			end
-			currentReagentObject.Count:SetText(reagentInPlayerBankString.."/"..reagentNeed)
+			currentReagentObject.Count:SetText(reagentInPlayerBankString.." /"..reagentNeed)
 		end
 	end
+	toggleCraftable(craftable)
 end
 
 function toggleCraftable(craftable)
-	print("toggle")
 	if craftable then
-		--TradeSkillFrame.DetailsFrame.CreateButton:SetEnabled(true)
-		--TradeSkillFrame.DetailsFrame.CreateAllButton:SetEnabled(true)
-		--TradeSkillFrame.DetailsFrame.CreateMultipleInputBox:SetEnabled(true)
+		TradeSkillFrame.DetailsFrame.CreateButton:SetEnabled(true)
+		TradeSkillFrame.DetailsFrame.CreateAllButton:SetEnabled(true)
+		TradeSkillFrame.DetailsFrame.CreateMultipleInputBox:SetEnabled(true)
 	else
-		--SpellStopCasting()
-		--TradeSkillFrame.DetailsFrame.CreateButton:SetEnabled(false)
-		--TradeSkillFrame.DetailsFrame.CreateAllButton:SetEnabled(false)
-		--TradeSkillFrame.DetailsFrame.CreateMultipleInputBox:SetEnabled(false)
+		print("stoprepeat")
+		C_TradeSkillUI.StopRecipeRepeat()
+		TradeSkillFrame.DetailsFrame.CreateButton:SetEnabled(false)
+		TradeSkillFrame.DetailsFrame.CreateAllButton:SetEnabled(false)
+		TradeSkillFrame.DetailsFrame.CreateMultipleInputBox:SetEnabled(false)
 	end
 end
 
 function updateRecipeCFI(event)
-	if event == "UPDATE_TRADESKILL_RECAST" or event == "TRADE_SKILL_FILTER_UPDATE" 
-		or event == "TRADE_SKILL_NAME_UPDATE" or event == "TRADE_SKILL_SHOW" 
-		or event == "TRADE_SKILL_UPDATE" or event == "SKILL_LINES_CHANGED" then
+	if event == "CURRENT_SPELL_CAST_CHANGED" then
 		updateCFI()
 	end
 end
@@ -115,11 +131,7 @@ _G[checkButton:GetName().."Text"]:SetText("Inventory Only")
 checkButton:SetPoint("CENTER", TradeSkillFrame.DetailsFrame.Contents.ResultIcon, "CENTER", 100, -5)
 checkButton:Show()
 checkButton:SetScript("OnClick", updateCFI)
-CheckButtonFrame:RegisterEvent("UPDATE_TRADESKILL_RECAST")
-CheckButtonFrame:RegisterEvent("TRADE_SKILL_FILTER_UPDATE")
-CheckButtonFrame:RegisterEvent("TRADE_SKILL_NAME_UPDATE")
-CheckButtonFrame:RegisterEvent("TRADE_SKILL_SHOW")
-CheckButtonFrame:RegisterEvent("TRADE_SKILL_UPDATE")
-CheckButtonFrame:RegisterEvent("SKILL_LINES_CHANGED")
-CheckButtonFrame:HookScript("OnEvent", function(self, event, ...) updateRecipeCFI(event); end)
-
+checkButton:RegisterEvent("CURRENT_SPELL_CAST_CHANGED")
+hooksecurefunc(TradeSkillFrame.DetailsFrame, "RefreshDisplay", updateCFI)
+TradeSkillFrame.DetailsFrame.Contents:HookScript("OnShow", function() checkButton:SetChecked(false) end)
+checkButton:HookScript("OnEvent", function(self, event, ...) updateRecipeCFI(event); end)
